@@ -49,7 +49,7 @@ export default function Home() {
         </footer>
         <nav>
           {/* Link to the Login/Registration page */}
-          <Link href="/users">Login/Register</Link>
+          <Link href="/users"><b style={{color: 'red'}}>Login/Register</b></Link>
         </nav>
         {/* Link to the Admin page (for admin users) temporary, just for development*/}
         <Link href="/admin">Admin</Link>
