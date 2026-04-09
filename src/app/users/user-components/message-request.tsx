@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../../../utils/supabase";
+import { supabase, logActivity } from "../../../../utils/supabase";
 
 // This component shows incoming message requests from potential matches.
 // Users can accept or decline these requests before starting a chat.
@@ -41,6 +41,7 @@ const MessageRequest = () => {
   }, []);
 
   const handleResponse = async (requestId: string, status: 'accepted' | 'declined') => {
+    const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase
       .from('friendships')
       .update({ status })
@@ -50,6 +51,9 @@ const MessageRequest = () => {
       console.error(`Error ${status} request:`, error.message);
       alert(`Failed to ${status} request.`);
     } else {
+      if (user) {
+        await logActivity(user.id, `friend_request_${status}`, { request_id: requestId });
+      }
       setRequests(prev => prev.filter(req => req.id !== requestId));
       alert(`Request ${status}!`);
     }

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import Link from "next/link";
-import { supabase } from "../../../../utils/supabase";
+import { supabase, logActivity } from "../../../../utils/supabase";
 
 interface RegisterProps {
   onSwitch: () => void;
@@ -36,6 +36,10 @@ const RegisterComponent: React.FC<RegisterProps> = ({ onSwitch }) => {
       setMessage({ type: "error", text: signUpError.message });
       setLoading(false);
       return;
+    }
+
+    if (data.user) {
+      await logActivity(data.user.id, "registration", { email, username });
     }
 
     // Success: The profile is now created automatically by the database trigger!

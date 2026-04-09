@@ -1,6 +1,6 @@
 import Link from "next/link";
 import React, { useState } from "react";
-import { supabase } from "../../../../utils/supabase";
+import { supabase, logActivity } from "../../../../utils/supabase";
 
 interface LoginProps {
   onSwitch: () => void;
@@ -21,7 +21,7 @@ const LoginComponent: React.FC<LoginProps> = ({ onSwitch, onLogin }) => {
     setError(null);
 
     // Call Supabase auth sign-in method
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -32,6 +32,9 @@ const LoginComponent: React.FC<LoginProps> = ({ onSwitch, onLogin }) => {
       setLoading(false);
     } else {
       // Success: Call parent handler to switch to Main view
+      if (data.user) {
+        await logActivity(data.user.id, "login", { email });
+      }
       onLogin();
     }
   };

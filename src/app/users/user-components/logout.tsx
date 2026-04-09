@@ -1,6 +1,6 @@
 import React from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../../../../utils/supabase";
+import { supabase, logActivity } from "../../../../utils/supabase";
 
 const Logout = () => {
   const router = useRouter();
@@ -12,6 +12,7 @@ const Logout = () => {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
+        await logActivity(user.id, "logout");
         // 2. Mark as offline/last seen right now
         await supabase
           .from('profiles')

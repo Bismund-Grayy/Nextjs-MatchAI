@@ -59,14 +59,27 @@ const Profile = () => {
 
         <div>
           <h3>Interests</h3>
-          {profile.interests && profile.interests.length > 0 ? (
-            <ul>
-              {profile.interests.map((interest: any, index: number) => (
-                <li key={index}>
-                  {interest.name} (Level: {interest.level})
-                </li>
-              ))}
-            </ul>
+          {profile.interests ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {Object.entries(profile.interests)
+                .filter(([_, value]) => value === true)
+                .map(([interest], index) => (
+                  <span 
+                    key={index} 
+                    style={{ 
+                      background: '#e0e0e0', 
+                      padding: '0.2rem 0.6rem', 
+                      borderRadius: '12px', 
+                      fontSize: '0.8rem' 
+                    }}
+                  >
+                    {interest}
+                  </span>
+                ))}
+              {Object.values(profile.interests).every(v => v === false) && (
+                <p>No interests selected.</p>
+              )}
+            </div>
           ) : (
             <p>No interests added yet.</p>
           )}

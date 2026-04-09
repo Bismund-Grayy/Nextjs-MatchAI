@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../../../utils/supabase";
+import { supabase, logActivity } from "../../../../utils/supabase";
 
 // Zodiac calculation utility function
 const getZodiacSign = (dateString: string) => {
@@ -25,14 +25,26 @@ const getZodiacSign = (dateString: string) => {
   return "";
 };
 
-interface Interest {
-  name: string;
-  level: number;
-}
+const INTEREST_OPTIONS = [
+  "Anime", "Coding", "Farming", "Fiction", "Writing", "Cooking", "Gaming", 
+  "History", "Martial Arts", "Movies", "Nature", "Books", "Pets", "Crafting", 
+  "Arts", "Singing", "Fitness", "Astrology", "Cars", "Travel", "Sports", 
+  "Business", "Life", "Education", "LGBTQ"
+];
+
+const RELIGION_OPTIONS = [
+  "Christianity", "Islam", "Hinduism", "Buddhism", "Sikhism", "Judaism", 
+  "Agnostic", "Atheistic", "Non-religious", "Other"
+];
+
+const NATIONALITY_OPTIONS = [
+  "American", "British", "Canadian", "Chinese", "French", "German", "Indian", "Japanese", "Other"
+];
 
 const ProfileSetup = ({ onComplete }: { onComplete: () => void }) => {
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string>("");
+  const [username, setUsername] = useState<string>("");
   const [formData, setFormData] = useState({
     gender: "",
     show_gender: true,
@@ -43,14 +55,22 @@ const ProfileSetup = ({ onComplete }: { onComplete: () => void }) => {
     location_preference: "none",
     nationality: "",
     religion: "",
-    interests: [] as Interest[],
+    interests: {} as Record<string, boolean>,
   });
 
   useEffect(() => {
+    // Initialize interests as false
+    const initialInterests: Record<string, boolean> = {};
+    INTEREST_OPTIONS.forEach(interest => {
+      initialInterests[interest] = false;
+    });
+    setFormData(prev => ({ ...prev, interests: initialInterests }));
+
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
+        setUsername(user.user_metadata.username || "");
       }
     };
     fetchUser();
@@ -62,23 +82,13 @@ const ProfileSetup = ({ onComplete }: { onComplete: () => void }) => {
     }
   }, [formData.birthday]);
 
-  const addInterest = () => {
+  const handleInterestChange = (interest: string) => {
     setFormData(prev => ({
       ...prev,
-      interests: [...prev.interests, { name: "", level: 3 }]
-    }));
-  };
-
-  const updateInterest = (index: number, field: keyof Interest, value: string | number) => {
-    const newInterests = [...formData.interests];
-    newInterests[index] = { ...newInterests[index], [field]: value };
-    setFormData(prev => ({ ...prev, interests: newInterests }));
-  };
-
-  const removeInterest = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      interests: prev.interests.filter((_, i) => i !== index)
+      interests: {
+        ...prev.interests,
+        [interest]: !prev.interests[interest]
+      }
     }));
   };
 
@@ -88,7 +98,9 @@ const ProfileSetup = ({ onComplete }: { onComplete: () => void }) => {
 
     const { error } = await supabase
       .from("profiles")
-      .update({
+      .upsert({
+        id: userId,
+        username: username, // Preserve username from registration
         gender: formData.gender,
         show_gender: formData.show_gender,
         birthday: formData.birthday,
@@ -100,12 +112,17 @@ const ProfileSetup = ({ onComplete }: { onComplete: () => void }) => {
         religion: formData.religion,
         interests: formData.interests,
         is_profile_complete: true,
-      })
-      .eq("id", userId);
+      });
 
     if (error) {
       alert("Error saving profile: " + error.message);
     } else {
+      await logActivity(userId, "profile_setup_complete", {
+        gender: formData.gender,
+        nationality: formData.nationality,
+        religion: formData.religion,
+        interests: Object.keys(formData.interests).filter(k => formData.interests[k])
+      });
       onComplete();
     }
     setLoading(false);
@@ -149,30 +166,18 @@ const ProfileSetup = ({ onComplete }: { onComplete: () => void }) => {
 
         <div style={{ marginBottom: "1rem" }}>
           <h3>Interests</h3>
-          {formData.interests.map((interest, index) => (
-            <div key={index} style={{ display: 'flex', gap: '1rem', marginBottom: '0.5rem', alignItems: 'center' }}>
-              <input
-                type="text"
-                placeholder={`Interest ${index + 1}`}
-                value={interest.name}
-                onChange={(e) => updateInterest(index, 'name', e.target.value)}
-                required
-                style={{ flex: 1, padding: '0.3rem' }}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.7rem' }}>Level: {interest.level}</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            {INTEREST_OPTIONS.map((interest) => (
+              <label key={interest} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <input
-                  type="range"
-                  min="1"
-                  max="5"
-                  value={interest.level}
-                  onChange={(e) => updateInterest(index, 'level', parseInt(e.target.value))}
+                  type="checkbox"
+                  checked={formData.interests[interest] || false}
+                  onChange={() => handleInterestChange(interest)}
                 />
-              </div>
-              <button type="button" onClick={() => removeInterest(index)} style={{ color: 'red' }}>×</button>
-            </div>
-          ))}
-          <button type="button" onClick={addInterest}>+ Add Interest</button>
+                {interest}
+              </label>
+            ))}
+          </div>
         </div>
 
         <div style={{ marginBottom: "1rem" }}>
@@ -186,12 +191,26 @@ const ProfileSetup = ({ onComplete }: { onComplete: () => void }) => {
 
         <div style={{ marginBottom: "1rem" }}>
           <label>Nationality:</label>
-          <input type="text" value={formData.nationality} onChange={(e) => setFormData(prev => ({ ...prev, nationality: e.target.value }))} style={{ display: 'block', width: '100%', padding: '0.5rem' }} />
+          <select 
+            value={formData.nationality} 
+            onChange={(e) => setFormData(prev => ({ ...prev, nationality: e.target.value }))} 
+            style={{ display: 'block', width: '100%', padding: '0.5rem' }}
+          >
+            <option value="">Select Nationality</option>
+            {NATIONALITY_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
         </div>
 
         <div style={{ marginBottom: "1rem" }}>
           <label>Religion:</label>
-          <input type="text" value={formData.religion} onChange={(e) => setFormData(prev => ({ ...prev, religion: e.target.value }))} style={{ display: 'block', width: '100%', padding: '0.5rem' }} />
+          <select 
+            value={formData.religion} 
+            onChange={(e) => setFormData(prev => ({ ...prev, religion: e.target.value }))} 
+            style={{ display: 'block', width: '100%', padding: '0.5rem' }}
+          >
+            <option value="">Select Religion</option>
+            {RELIGION_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
         </div>
 
         <button type="submit" disabled={loading} style={{ width: '100%', padding: '1rem', background: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>

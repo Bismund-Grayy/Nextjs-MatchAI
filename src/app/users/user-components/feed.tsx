@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../../../utils/supabase";
+import { supabase, logActivity } from "../../../../utils/supabase";
 
 // The Feed component serves as the main social hub for users to discover and match with others.
 // It will fetch profiles from the Supabase 'profiles' table.
@@ -61,6 +61,7 @@ const Feed = () => {
       console.error("Error adding friend:", error.message);
       alert("Failed to send friend request. Make sure the 'friendships' table exists in your Supabase project.");
     } else {
+      await logActivity(currentUser.id, "friend_request_sent", { target_id: profileId });
       alert("Friend request sent!");
     }
   };

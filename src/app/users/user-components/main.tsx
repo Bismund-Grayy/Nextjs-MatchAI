@@ -60,7 +60,7 @@ export default function Main() {
           .eq('id', currentUser.id)
           .single();
         
-        if (profile && !profile.is_profile_complete) {
+        if (!profile || !profile.is_profile_complete) {
           setActiveView('setup');
           setIsProfileComplete(false);
         } else {
