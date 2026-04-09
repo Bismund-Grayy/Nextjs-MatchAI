@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "../../../../utils/supabase";
+import { supabase, logActivity } from "../../../../utils/supabase";
 
 // This component handles the interactive chat session between users.
 // It uses Supabase for message storage and real-time updates.
-const ChatInterface = () => {
+const ChatInterface = ({ friend, onBack }: { friend: any, onBack: () => void }) => {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [user, setUser] = useState<any>(null);
@@ -19,101 +19,132 @@ const ChatInterface = () => {
   }, [messages]);
 
   useEffect(() => {
-    // 1. Create the channel synchronously
-    const channel = supabase.channel('chat-room');
+    const fetchUser = async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      setUser(currentUser);
+    };
+    fetchUser();
+  }, []);
 
-    // 2. Set up Realtime listeners synchronously
+  useEffect(() => {
+    if (!user || !friend) return;
+
+    // 1. Create the channel for this specific private chat
+    const channelId = [user.id, friend.id].sort().join('-');
+    const channel = supabase.channel(`chat:${channelId}`);
+
+    // 2. Set up Realtime listeners BEFORE calling subscribe()
     channel
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `receiver_id=eq.${user.id}` 
+        },
         async (payload) => {
-          // When a new message arrives, fetch its sender's info
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('username')
-            .eq('id', payload.new.sender_id)
-            .single();
-
-          const messageWithProfile = {
-            ...payload.new,
-            profiles: profileData
-          };
-          
-          setMessages((prev) => [...prev, messageWithProfile]);
+          if (payload.new.sender_id === friend.id) {
+            setMessages((prev) => [...prev, payload.new]);
+          }
         }
-      )
-      .subscribe();
+      );
 
-    const loadData = async () => {
-      // 3. Get current user session
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      setUser(currentUser);
+    // 3. Now call subscribe()
+    channel.subscribe();
 
-      // 4. Fetch initial message history
+    // 4. Fetch initial message history
+    const fetchHistory = async () => {
       const { data, error } = await supabase
         .from('messages')
-        .select(`
-          *,
-          profiles:sender_id (username)
-        `)
+        .select('*')
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friend.id}),and(sender_id.eq.${friend.id},receiver_id.eq.${user.id})`)
         .order('created_at', { ascending: true })
         .limit(50);
 
       if (data) setMessages(data);
     };
 
-    loadData();
+    fetchHistory();
 
     // 5. Cleanup: Use removeChannel for a more thorough cleanup
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [user?.id, friend?.id]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user) return;
+    if (!newMessage.trim() || !user || !friend) return;
 
-    // Insert message into Supabase
-    const { error } = await supabase.from('messages').insert([
+    const messageContent = newMessage.trim();
+    setNewMessage(""); 
+
+    const { data, error } = await supabase.from('messages').insert([
       {
-        content: newMessage,
+        content: messageContent,
         sender_id: user.id,
-        // receiver_id is left null for Global Chat
+        receiver_id: friend.id,
       },
-    ]);
+    ]).select().single();
 
     if (error) {
       console.error("Error sending message:", error.message);
-    } else {
-      setNewMessage("");
+      alert("Failed to send message.");
+    } else if (data) {
+      setMessages((prev) => [...prev, data]);
+      await logActivity(user.id, "chat_message_sent", { receiver_id: friend.id });
     }
   };
 
+  if (!friend) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <p>No friend selected for chat.</p>
+        <button onClick={onBack}>Back to Friends</button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '600px', margin: '0 auto' }}>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', border: '1px solid #ddd', borderRadius: '8px', marginBottom: '1rem', backgroundColor: '#f9f9f9' }}>
+      <header style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.5rem', borderBottom: '1px solid #eee' }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>←</button>
+        <h3>Chat with {friend.username}</h3>
+      </header>
+      
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', border: '1px solid #ddd', borderRadius: '8px', margin: '1rem 0', backgroundColor: '#f9f9f9', minHeight: '300px' }}>
         {messages.length === 0 ? (
-          <p style={{ textAlign: 'center', color: '#888' }}>No messages yet. Start the conversation!</p>
+          <p style={{ textAlign: 'center', color: '#888' }}>No messages yet. Say hi to {friend.username}!</p>
         ) : (
-          messages.map((msg) => (
-            <div key={msg.id} style={{ marginBottom: '0.8rem', textAlign: msg.sender_id === user?.id ? 'right' : 'left' }}>
-              <small style={{ fontWeight: 'bold', display: 'block' }}>
-                {msg.profiles?.username || "Unknown User"}
-              </small>
-              <span style={{
-                display: 'inline-block',
-                padding: '0.5rem 1rem',
-                borderRadius: '12px',
-                backgroundColor: msg.sender_id === user?.id ? '#007bff' : '#e9ecef',
-                color: msg.sender_id === user?.id ? 'white' : 'black',
-                marginTop: '0.2rem'
-              }}>
-                {msg.content}
-              </span>
-            </div>
-          ))
+          messages.map((msg, index) => {
+            const isMe = msg.sender_id === user?.id;
+            return (
+              <div 
+                key={msg.id || index} 
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  alignItems: isMe ? 'flex-end' : 'flex-start',
+                  marginBottom: '1rem' 
+                }}
+              >
+                <div style={{ 
+                  background: isMe ? '#007bff' : '#e9ecef', 
+                  color: isMe ? 'white' : 'black', 
+                  padding: '0.5rem 1rem', 
+                  borderRadius: '12px',
+                  maxWidth: '80%',
+                  wordBreak: 'break-word'
+                }}>
+                  {msg.content}
+                </div>
+                <span style={{ fontSize: '0.7rem', color: '#888', marginTop: '0.2rem' }}>
+                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -124,9 +155,19 @@ const ChatInterface = () => {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Type a message..."
-          style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+          style={{ flex: 1, padding: '0.7rem', borderRadius: '4px', border: '1px solid #ccc' }}
         />
-        <button type="submit" style={{ padding: '0.5rem 1rem', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+        <button 
+          type="submit" 
+          style={{ 
+            padding: '0.7rem 1.5rem', 
+            background: '#007bff', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '4px', 
+            cursor: 'pointer' 
+          }}
+        >
           Send
         </button>
       </form>

@@ -19,6 +19,7 @@ export default function Main() {
   const [activeView, setActiveView] = useState<ActiveView>('feed');
   const [user, setUser] = useState<any>(null);
   const [isProfileComplete, setIsProfileComplete] = useState<boolean | null>(null);
+  const [selectedChatFriend, setSelectedChatFriend] = useState<any>(null);
 
   useEffect(() => {
     // 1. Create the channel synchronously
@@ -92,11 +93,14 @@ export default function Main() {
       case 'profile':
         return <Profile />;
       case 'friends':
-        return <FriendList />;
+        return <FriendList onChat={(friend) => {
+          setSelectedChatFriend(friend);
+          setActiveView('chat');
+        }} />;
       case 'messages':
         return <MessageRequest />;
       case 'chat':
-        return <ChatInterface />;
+        return <ChatInterface friend={selectedChatFriend} onBack={() => setActiveView('friends')} />;
       default:
         return <Feed />;
     }
@@ -130,7 +134,6 @@ export default function Main() {
               <li style={navItemStyle('profile')} onClick={() => setActiveView('profile')}>Profile</li>
               <li style={navItemStyle('friends')} onClick={() => setActiveView('friends')}>Friends</li>
               <li style={navItemStyle('messages')} onClick={() => setActiveView('messages')}>Message Requests</li>
-              <li style={navItemStyle('chat')} onClick={() => setActiveView('chat')}>Chat</li>
             </ul>
           </nav>
         )}

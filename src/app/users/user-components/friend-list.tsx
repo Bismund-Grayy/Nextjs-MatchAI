@@ -5,7 +5,7 @@ import { supabase } from "../../../../utils/supabase";
 
 // This component displays a list of the current user's friends or connections.
 // It will query the Supabase 'friendships' relationship table.
-const FriendList = () => {
+const FriendList = ({ onChat }: { onChat: (friend: any) => void }) => {
   const [friends, setFriends] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -54,6 +54,21 @@ const FriendList = () => {
             <div key={friend.id} style={{ border: '1px solid #ccc', padding: '1rem', borderRadius: '8px', background: '#fff' }}>
               <h3>{friend.username || 'Anonymous User'}</h3>
               <p>{friend.gender} • {friend.zodiac}</p>
+              <button 
+                onClick={() => onChat(friend)}
+                style={{ 
+                  marginTop: '0.5rem', 
+                  width: '100%', 
+                  padding: '0.4rem', 
+                  background: '#007bff', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '4px', 
+                  cursor: 'pointer' 
+                }}
+              >
+                Chat
+              </button>
             </div>
           ))}
         </div>
